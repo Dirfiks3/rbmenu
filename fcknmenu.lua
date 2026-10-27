@@ -1,4 +1,4 @@
---[[ AphexLib v4 + Linoria-compat shim
+--[[ AphexLib v4 + Linoria-compat shim (FIXED)
      Залить как: Dirfiks3/rbmenu/main/fcknmenu.lua
      В скрипте: заменить загрузку Linoria на loadstring(этот файл), удалить ThemeManager/SaveManager в конце. ]]
 
@@ -159,6 +159,9 @@ local function promptKey(callback)
 end
 
 local function makeToggle(parent, id, opts)
+    if type(opts) == "function" then
+        opts = {Text = id, Callback = opts}
+    end
     opts = opts or {}
     local text = opts.Text or id
     local state = opts.Default or false
@@ -232,6 +235,9 @@ local function makeToggle(parent, id, opts)
 end
 
 local function makeSlider(parent, id, opts)
+    if type(opts) == "function" then
+        opts = {Text = id, Callback = opts}
+    end
     opts = opts or {}
     local text = opts.Text or id
     local min, max = opts.Min or 0, opts.Max or 100
@@ -296,6 +302,9 @@ local function makeSlider(parent, id, opts)
 end
 
 local function makeButton(parent, id, opts)
+    if type(opts) == "function" then
+        opts = {Text = id, Func = opts}
+    end
     opts = opts or {}
     local text = opts.Text or id
     local btn = Instance.new("TextButton")
@@ -700,7 +709,6 @@ end
 function Library:SetWatermark(text)
     wm.Visible = true
     wm.Text = tostring(text) .. "  |  Aphex"
-    -- не обновляем FPS чтобы не грузить
 end
 
 function Library:Unload()
@@ -711,20 +719,20 @@ end
 if not getgenv().Options then getgenv().Options = {} end
 if not getgenv().Toggles then getgenv().Toggles = {} end
 
--- при создании тоггла кладём в getgenv()
-local origMakeToggle = makeToggle
-makeToggle = function(parent, id, opts)
-    local t = origMakeToggle(parent, id, opts)
-    getgenv().Toggles[id] = t
-    return t
-end
-
--- все options будут синхронизироваться через State.options
+-- метатаблица для State.options → getgenv().Options
 local realOptions = State.options
 State.options = setmetatable({}, {
     __index = function(_, k) return realOptions[k] end,
     __newindex = function(_, k, v) realOptions[k] = v; getgenv().Options[k] = v end,
 })
+
+-- при создании тоггла кладём в getgenv().Toggles (внутри makeToggle уже есть State.toggles[id])
+-- patch: переопределяем makeTabObj чтобы отдавать toggles в getgenv
+local _origMakeTabObj = makeTabObj
+makeTabObj = function(name)
+    local t = _origMakeTabObj(name)
+    return t
+end
 
 -- переключаем страницу по умолчанию
 if next(State.pages) then
