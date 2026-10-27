@@ -1,161 +1,96 @@
---[[ Aphex Menu v4 — full customization + no global blur ]]
+--[[ AphexLib v4 + Linoria-compat shim
+     Залить как: Dirfiks3/rbmenu/main/fcknmenu.lua
+     В скрипте: заменить загрузку Linoria на loadstring(этот файл), удалить ThemeManager/SaveManager в конце. ]]
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local pg = player:WaitForChild("PlayerGui")
 
 -- ===== CONFIG =====
 local Config = {
     accent      = Color3.fromRGB(255, 255, 255),
-    accent2     = Color3.fromRGB(120, 180, 255), -- для градиента
-    useGradient = false,
+    accent2     = Color3.fromRGB(120, 180, 255),
     bgColor     = Color3.fromRGB(15, 15, 15),
     panelColor  = Color3.fromRGB(22, 22, 22),
     strokeColor = Color3.fromRGB(45, 45, 45),
     textColor   = Color3.fromRGB(235, 235, 235),
     dimColor    = Color3.fromRGB(140, 140, 140),
-    menuAlpha   = 0.05,   -- BackgroundTransparency главного фрейма
-    panelAlpha  = 0.25,   -- прозрачность панелей
+    menuAlpha   = 0.05,
+    panelAlpha  = 0.25,
     radius      = 10,
-    width       = 540,
-    height      = 380,
+    width       = 560,
+    height      = 400,
     font        = Enum.Font.GothamMedium,
     fontBold    = Enum.Font.GothamBold,
     menuBind    = Enum.KeyCode.RightShift,
 }
 local State = {
-    binds = {},
-    conns = {},
-    open = true,
-    pages = {},
-    currentPage = nil,
-    accentRegistry = {},
-    elements = {}, -- для пересборки кастома
+    binds = {}, conns = {}, open = true, pages = {},
+    currentPage = nil, accentRegistry = {}, elements = {},
+    options = {}, toggles = {}, keybindFrame = {Visible = true},
+    watermarkObj = nil, unloaded = false,
 }
 local function track(c) table.insert(State.conns, c); return c end
-
--- ===== ЦВЕТА (алиас на Config) =====
 local C = Config
-
-local FONT = Config.font
-local FONT_B = Config.fontBold
+local FONT, FONT_B = Config.font, Config.fontBold
 
 if pg:FindFirstChild("AphexMenu") then pg.AphexMenu:Destroy() end
 
 -- ===== КОРЕНЬ =====
 local gui = Instance.new("ScreenGui")
-gui.Name = "AphexMenu"
-gui.ResetOnSpawn = false
-gui.IgnoreGuiInset = true
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-gui.DisplayOrder = 999
-gui.Parent = pg
+gui.Name = "AphexMenu"; gui.ResetOnSpawn = false; gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling; gui.DisplayOrder = 999; gui.Parent = pg
 
 local main = Instance.new("Frame")
 main.Name = "Main"
 main.Size = UDim2.fromOffset(Config.width, Config.height)
 main.Position = UDim2.new(0.5, -Config.width/2, 0.5, -Config.height/2)
-main.BackgroundColor3 = C.bgColor
-main.BackgroundTransparency = C.menuAlpha
-main.BorderSizePixel = 0
-main.Active = true
-main.ClipsDescendants = true
-main.Parent = gui
+main.BackgroundColor3 = C.bgColor; main.BackgroundTransparency = C.menuAlpha
+main.BorderSizePixel = 0; main.Active = true; main.ClipsDescendants = true; main.Parent = gui
 
 local corner = Instance.new("UICorner"); corner.CornerRadius = UDim.new(0, C.radius); corner.Parent = main
 local stroke = Instance.new("UIStroke"); stroke.Color = C.strokeColor; stroke.Thickness = 1; stroke.Transparency = 0.3; stroke.Parent = main
 
--- ===== GLASS СЛОИ (без глобального blur) =====
 local glassGlow = Instance.new("Frame")
-glassGlow.Size = UDim2.new(1, 0, 0.55, 0)
-glassGlow.BackgroundColor3 = Color3.fromRGB(255,255,255)
-glassGlow.BackgroundTransparency = 1
-glassGlow.BorderSizePixel = 0
-glassGlow.ZIndex = 0
-glassGlow.Parent = main
-do
-    local g = Instance.new("UIGradient")
-    g.Rotation = 90
-    g.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.92),
-        NumberSequenceKeypoint.new(0.35, 0.98),
-        NumberSequenceKeypoint.new(1, 1),
-    })
-    g.Parent = glassGlow
-end
-
-local glassBottom = Instance.new("Frame")
-glassBottom.Size = UDim2.new(1, 0, 0.4, 0)
-glassBottom.Position = UDim2.new(0, 0, 0.6, 0)
-glassBottom.BackgroundColor3 = Color3.fromRGB(255,255,255)
-glassBottom.BackgroundTransparency = 1
-glassBottom.BorderSizePixel = 0
-glassBottom.ZIndex = 0
-glassBottom.Parent = main
-do
-    local g = Instance.new("UIGradient")
-    g.Rotation = -90
-    g.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.94),
-        NumberSequenceKeypoint.new(1, 1),
-    })
-    g.Parent = glassBottom
-end
-
-local innerGlow = Instance.new("UIStroke")
-innerGlow.Color = Color3.fromRGB(255,255,255)
-innerGlow.Thickness = 1
-innerGlow.Transparency = 0.85
-innerGlow.Parent = main
+glassGlow.Size = UDim2.new(1, 0, 0.55, 0); glassGlow.BackgroundColor3 = Color3.fromRGB(255,255,255)
+glassGlow.BackgroundTransparency = 1; glassGlow.BorderSizePixel = 0; glassGlow.ZIndex = 0; glassGlow.Parent = main
+do local g = Instance.new("UIGradient"); g.Rotation = 90
+   g.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0,0.92),NumberSequenceKeypoint.new(0.35,0.98),NumberSequenceKeypoint.new(1,1)})
+   g.Parent = glassGlow end
+local innerGlow = Instance.new("UIStroke"); innerGlow.Color = Color3.fromRGB(255,255,255)
+innerGlow.Thickness = 1; innerGlow.Transparency = 0.85; innerGlow.Parent = main
 
 -- ===== ШАПКА =====
 local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 46)
-titleBar.BackgroundColor3 = C.panelColor
-titleBar.BackgroundTransparency = C.panelAlpha
-titleBar.BorderSizePixel = 0
-titleBar.ZIndex = 3
-titleBar.Parent = main
+titleBar.Size = UDim2.new(1, 0, 0, 46); titleBar.BackgroundColor3 = C.panelColor
+titleBar.BackgroundTransparency = C.panelAlpha; titleBar.BorderSizePixel = 0
+titleBar.ZIndex = 3; titleBar.Parent = main
 local tc = Instance.new("UICorner"); tc.CornerRadius = UDim.new(0, C.radius); tc.Parent = titleBar
-local tf = Instance.new("Frame")
-tf.Size = UDim2.new(1, 0, 0, 10); tf.Position = UDim2.new(0, 0, 1, -10)
+local tf = Instance.new("Frame"); tf.Size = UDim2.new(1, 0, 0, 10); tf.Position = UDim2.new(0, 0, 1, -10)
 tf.BackgroundColor3 = C.panelColor; tf.BackgroundTransparency = C.panelAlpha; tf.BorderSizePixel = 0; tf.ZIndex = 3; tf.Parent = titleBar
 
 local title = Instance.new("TextLabel")
-title.Text = "APHEX"
-title.Font = FONT_B
-title.TextSize = 17
-title.TextColor3 = C.accent
-title.BackgroundTransparency = 1
-title.Position = UDim2.new(0, 20, 0, 0)
-title.Size = UDim2.new(0.5, 0, 1, 0)
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.ZIndex = 4
-title.Parent = titleBar
+title.Text = "APHEX"; title.Font = FONT_B; title.TextSize = 17; title.TextColor3 = C.accent
+title.BackgroundTransparency = 1; title.Position = UDim2.new(0, 20, 0, 0); title.Size = UDim2.new(0.5, 0, 1, 0)
+title.TextXAlignment = Enum.TextXAlignment.Left; title.ZIndex = 4; title.Parent = titleBar
 
 local menuBindLbl = Instance.new("TextLabel")
 menuBindLbl.Text = "[" .. Config.menuBind.Name .. "]"
-menuBindLbl.Font = FONT
-menuBindLbl.TextSize = 11
-menuBindLbl.TextColor3 = C.dimColor
-menuBindLbl.BackgroundTransparency = 1
-menuBindLbl.Position = UDim2.new(0, 96, 0, 0)
-menuBindLbl.Size = UDim2.new(0, 120, 1, 0)
-menuBindLbl.TextXAlignment = Enum.TextXAlignment.Left
-menuBindLbl.ZIndex = 4
-menuBindLbl.Parent = titleBar
+menuBindLbl.Font = FONT; menuBindLbl.TextSize = 11; menuBindLbl.TextColor3 = C.dimColor
+menuBindLbl.BackgroundTransparency = 1; menuBindLbl.Position = UDim2.new(0, 96, 0, 0)
+menuBindLbl.Size = UDim2.new(0, 120, 1, 0); menuBindLbl.TextXAlignment = Enum.TextXAlignment.Left
+menuBindLbl.ZIndex = 4; menuBindLbl.Parent = titleBar
 
 local closeBtn = Instance.new("TextButton")
-closeBtn.Text = "✕"; closeBtn.Font = FONT_B; closeBtn.TextSize = 14
-closeBtn.TextColor3 = C.dimColor; closeBtn.BackgroundTransparency = 1
-closeBtn.Size = UDim2.fromOffset(46, 46)
-closeBtn.Position = UDim2.new(1, -46, 0, 0)
-closeBtn.ZIndex = 5; closeBtn.Parent = titleBar
+closeBtn.Text = "✕"; closeBtn.Font = FONT_B; closeBtn.TextSize = 14; closeBtn.TextColor3 = C.dimColor
+closeBtn.BackgroundTransparency = 1; closeBtn.Size = UDim2.fromOffset(46, 46)
+closeBtn.Position = UDim2.new(1, -46, 0, 0); closeBtn.ZIndex = 5; closeBtn.Parent = titleBar
 track(closeBtn.MouseEnter:Connect(function() closeBtn.TextColor3 = C.accent end))
 track(closeBtn.MouseLeave:Connect(function() closeBtn.TextColor3 = C.dimColor end))
-track(closeBtn.MouseButton1Click:Connect(function() unload() end))
+track(closeBtn.MouseButton1Click:Connect(function() if Library and Library.Unload then Library:Unload() end end))
 
 -- драг
 local dragging, dragStart, startPos
@@ -176,189 +111,40 @@ end))
 
 -- ===== САЙДБАР =====
 local sidebar = Instance.new("Frame")
-sidebar.Size = UDim2.new(0, 68, 1, -46)
-sidebar.Position = UDim2.new(0, 0, 0, 46)
-sidebar.BackgroundColor3 = C.panelColor
-sidebar.BackgroundTransparency = 0.35
-sidebar.BorderSizePixel = 0
-sidebar.ZIndex = 2
-sidebar.Parent = main
-
-local sbList = Instance.new("UIListLayout")
-sbList.Padding = UDim.new(0, 6)
-sbList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-sbList.SortOrder = Enum.SortOrder.LayoutOrder
-sbList.Parent = sidebar
-
+sidebar.Size = UDim2.new(0, 68, 1, -46); sidebar.Position = UDim2.new(0, 0, 0, 46)
+sidebar.BackgroundColor3 = C.panelColor; sidebar.BackgroundTransparency = 0.35
+sidebar.BorderSizePixel = 0; sidebar.ZIndex = 2; sidebar.Parent = main
+local sbList = Instance.new("UIListLayout"); sbList.Padding = UDim.new(0, 6)
+sbList.HorizontalAlignment = Enum.HorizontalAlignment.Center; sbList.SortOrder = Enum.SortOrder.LayoutOrder; sbList.Parent = sidebar
 local sbPad = Instance.new("UIPadding"); sbPad.PaddingTop = UDim.new(0, 10); sbPad.Parent = sidebar
-
-local sbDivider = Instance.new("Frame")
-sbDivider.Size = UDim2.new(0, 1, 1, -20); sbDivider.Position = UDim2.new(1, -1, 0, 10)
-sbDivider.BackgroundColor3 = C.strokeColor; sbDivider.BackgroundTransparency = 0.6
-sbDivider.BorderSizePixel = 0; sbDivider.ZIndex = 2; sbDivider.Parent = sidebar
+local sbDivider = Instance.new("Frame"); sbDivider.Size = UDim2.new(0, 1, 1, -20); sbDivider.Position = UDim2.new(1, -1, 0, 10)
+sbDivider.BackgroundColor3 = C.strokeColor; sbDivider.BackgroundTransparency = 0.6; sbDivider.BorderSizePixel = 0
+sbDivider.ZIndex = 2; sbDivider.Parent = sidebar
 
 -- ===== КОНТЕНТ =====
 local contentHolder = Instance.new("Frame")
-contentHolder.Size = UDim2.new(1, -68, 1, -46)
-contentHolder.Position = UDim2.new(0, 68, 0, 46)
-contentHolder.BackgroundTransparency = 1
-contentHolder.ZIndex = 2
-contentHolder.Parent = main
+contentHolder.Size = UDim2.new(1, -68, 1, -46); contentHolder.Position = UDim2.new(0, 68, 0, 46)
+contentHolder.BackgroundTransparency = 1; contentHolder.ZIndex = 2; contentHolder.Parent = main
 
--- ===== РЕЕСТР АКЦЕНТА =====
-local function regAccent(obj, prop)
-    table.insert(State.accentRegistry, {obj = obj, prop = prop or "BackgroundColor3"})
-end
-
+-- ===== АКЦЕНТ =====
+local function regAccent(obj, prop) table.insert(State.accentRegistry, {obj = obj, prop = prop or "BackgroundColor3"}) end
 local function applyAccent(color)
     Config.accent = color
     for _, e in ipairs(State.accentRegistry) do
-        if e.obj and e.obj.Parent then
-            if e.obj:IsA("UIStroke") or e.obj:IsA("TextLabel") or e.obj:IsA("TextButton") then
-                e.obj[e.prop] = color
-            else
-                e.obj[e.prop] = color
-            end
-        end
+        if e.obj and e.obj.Parent then e.obj[e.prop] = color end
     end
     title.TextColor3 = color
-    for _, page in pairs(State.pages) do
-        if page.tabBtn then page.tabBtn.TextColor3 = color end
-    end
+    for _, page in pairs(State.pages) do if page.tabBtn then page.tabBtn.TextColor3 = color end end
     if activeIndicator then activeIndicator.BackgroundColor3 = color end
-    if gradientAccent then
-        gradientAccent.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, color),
-            ColorSequenceKeypoint.new(1, Config.accent2),
-        })
-    end
 end
 
--- ===== ПЕРЕСОБОРКА ЦВЕТОВ (при смене темы) =====
-local function rebuildColors()
-    main.BackgroundColor3 = Config.bgColor
-    main.BackgroundTransparency = Config.menuAlpha
-    stroke.Color = Config.strokeColor
-    titleBar.BackgroundColor3 = Config.panelColor
-    titleBar.BackgroundTransparency = Config.panelAlpha
-    tf.BackgroundColor3 = Config.panelColor
-    tf.BackgroundTransparency = Config.panelAlpha
-    sidebar.BackgroundColor3 = Config.panelColor
-    sbDivider.BackgroundColor3 = Config.strokeColor
-    title.TextColor3 = Config.accent
-    menuBindLbl.TextColor3 = Config.dimColor
-    closeBtn.TextColor3 = Config.dimColor
-    -- перекрашиваем панели элементов
-    for _, el in ipairs(State.elements) do
-        if el.panel and el.panel.Parent then
-            el.panel.BackgroundColor3 = Config.panelColor
-            el.panel.BackgroundTransparency = Config.panelAlpha
-        end
-        if el.label and el.label.Parent then
-            el.label.TextColor3 = Config.textColor
-        end
-    end
-end
-
--- ===== СТРАНИЦЫ =====
-local pages = State.pages
-local currentPage = nil
-local activeIndicator = nil
-local gradientAccent = nil
-
-local function createPage(name)
-    local holder = Instance.new("Frame")
-    holder.Name = "Page_" .. name
-    holder.Size = UDim2.fromScale(1, 1)
-    holder.BackgroundTransparency = 1
-    holder.Visible = false
-    holder.ZIndex = 2
-    holder.Parent = contentHolder
-
-    local scroll = Instance.new("ScrollingFrame")
-    scroll.Size = UDim2.new(1, -24, 1, -20)
-    scroll.Position = UDim2.new(0, 16, 0, 12)
-    scroll.BackgroundTransparency = 1
-    scroll.BorderSizePixel = 0
-    scroll.ScrollBarThickness = 3
-    scroll.ScrollBarImageColor3 = Config.strokeColor
-    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    scroll.ZIndex = 2
-    scroll.Parent = holder
-    local list = Instance.new("UIListLayout")
-    list.Padding = UDim.new(0, 6); list.SortOrder = Enum.SortOrder.LayoutOrder; list.Parent = scroll
-
-    pages[name] = {holder = holder, content = scroll, tabBtn = nil}
-    return scroll
-end
-
-local pageScroll = {}
-pageScroll.General = createPage("General")
-pageScroll.Player  = createPage("Player")
-pageScroll.Binds   = createPage("Binds")
-pageScroll.Misc    = createPage("Misc")
-pageScroll.Custom  = createPage("Custom")
-
-activeIndicator = Instance.new("Frame")
-activeIndicator.Size = UDim2.new(0, 3, 0, 28)
-activeIndicator.BackgroundColor3 = Config.accent
-activeIndicator.BorderSizePixel = 0
-activeIndicator.ZIndex = 3
-activeIndicator.Parent = sidebar
-local aiC = Instance.new("UICorner"); aiC.CornerRadius = UDim.new(1,0); aiC.Parent = activeIndicator
-
-local function switchPage(name)
-    for n, page in pairs(pages) do
-        page.holder.Visible = (n == name)
-    end
-    currentPage = name
-    local btn = pages[name] and pages[name].tabBtn
-    if btn then
-        TweenService:Create(activeIndicator, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Position = UDim2.new(0, 0, 0, btn.AbsolutePosition.Y - sidebar.AbsolutePosition.Y)
-        }):Play()
-    end
-    for n, page in pairs(pages) do
-        if page.tabBtn then
-            page.tabBtn.TextColor3 = (n == name) and Config.accent or Config.dimColor
-        end
-    end
-end
-
-local icons = {General="G", Player="P", Binds="B", Misc="M", Custom="C"}
-local order = {"General","Player","Binds","Misc","Custom"}
-for i, name in ipairs(order) do
-    local btn = Instance.new("TextButton")
-    btn.Text = icons[name]; btn.Font = FONT_B; btn.TextSize = 16
-    btn.TextColor3 = Config.dimColor
-    btn.BackgroundColor3 = Config.panelColor
-    btn.BackgroundTransparency = 0.4
-    btn.BorderSizePixel = 0; btn.AutoButtonColor = false
-    btn.Size = UDim2.fromOffset(44, 44); btn.LayoutOrder = i
-    btn.ZIndex = 3; btn.Parent = sidebar
-    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0,8); bc.Parent = btn
-    pages[name].tabBtn = btn
-    track(btn.MouseEnter:Connect(function()
-        if currentPage ~= name then TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundTransparency = 0.15}):Play() end
-    end))
-    track(btn.MouseLeave:Connect(function()
-        if currentPage ~= name then TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundTransparency = 0.4}):Play() end
-    end))
-    track(btn.MouseButton1Click:Connect(function() switchPage(name) end))
-end
-
--- ===== ХЕЛПЕРЫ =====
+-- ===== ХЕЛПЕРЫ ЭЛЕМЕНТОВ =====
 local function promptKey(callback)
     local overlay = Instance.new("TextLabel")
-    overlay.Text = "Press any key...  (Esc = cancel)"
-    overlay.Font = FONT_B; overlay.TextSize = 14
-    overlay.TextColor3 = Config.accent
-    overlay.BackgroundColor3 = Config.bgColor
-    overlay.BackgroundTransparency = 0.05
-    overlay.BorderSizePixel = 0
-    overlay.Size = UDim2.fromOffset(280, 50)
-    overlay.Position = UDim2.new(0.5, -140, 0.5, -25)
+    overlay.Text = "Press any key...  (Esc = cancel)"; overlay.Font = FONT_B; overlay.TextSize = 14
+    overlay.TextColor3 = Config.accent; overlay.BackgroundColor3 = Config.bgColor
+    overlay.BackgroundTransparency = 0.05; overlay.BorderSizePixel = 0
+    overlay.Size = UDim2.fromOffset(280, 50); overlay.Position = UDim2.new(0.5, -140, 0.5, -25)
     overlay.ZIndex = 50; overlay.Parent = gui
     local oc = Instance.new("UICorner"); oc.CornerRadius = UDim.new(0,6); oc.Parent = overlay
     local os = Instance.new("UIStroke"); os.Color = Config.accent; os.Thickness = 1; os.Parent = overlay
@@ -372,45 +158,37 @@ local function promptKey(callback)
     end)
 end
 
-local function addToggle(parentScroll, text, default, callback)
+local function makeToggle(parent, id, opts)
+    opts = opts or {}
+    local text = opts.Text or id
+    local state = opts.Default or false
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -6, 0, 38)
-    row.BackgroundColor3 = Config.panelColor
-    row.BackgroundTransparency = Config.panelAlpha
-    row.BorderSizePixel = 0; row.Parent = parentScroll
+    row.Size = UDim2.new(1, -6, 0, 38); row.BackgroundColor3 = Config.panelColor
+    row.BackgroundTransparency = Config.panelAlpha; row.BorderSizePixel = 0; row.Parent = parent
     local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0,6); rc.Parent = row
-
     local lbl = Instance.new("TextLabel")
-    lbl.Text = text; lbl.Font = FONT; lbl.TextSize = 13; lbl.TextColor3 = Config.textColor
-    lbl.BackgroundTransparency = 1
-    lbl.Position = UDim2.new(0, 12, 0, 0); lbl.Size = UDim2.new(0.55, 0, 1, 0)
+    lbl.Text = text; lbl.Font = FONT; lbl.TextSize = 12; lbl.TextColor3 = Config.textColor
+    lbl.BackgroundTransparency = 1; lbl.Position = UDim2.new(0, 12, 0, 0); lbl.Size = UDim2.new(0.55, 0, 1, 0)
     lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
-
     local bindLbl = Instance.new("TextButton")
-    bindLbl.Text = "[None]"; bindLbl.Font = FONT; bindLbl.TextSize = 11; bindLbl.TextColor3 = Config.dimColor
-    bindLbl.BackgroundTransparency = 1
-    bindLbl.Position = UDim2.new(1, -130, 0, 0); bindLbl.Size = UDim2.new(0, 70, 1, 0)
+    bindLbl.Text = "[None]"; bindLbl.Font = FONT; bindLbl.TextSize = 10; bindLbl.TextColor3 = Config.dimColor
+    bindLbl.BackgroundTransparency = 1; bindLbl.Position = UDim2.new(1, -130, 0, 0); bindLbl.Size = UDim2.new(0, 70, 1, 0)
     bindLbl.TextXAlignment = Enum.TextXAlignment.Right; bindLbl.Parent = row
     track(bindLbl.MouseEnter:Connect(function() bindLbl.TextColor3 = Config.accent end))
     track(bindLbl.MouseLeave:Connect(function() bindLbl.TextColor3 = Config.dimColor end))
-
-    local state = default or false
     local knobBg = Instance.new("Frame")
-    knobBg.Size = UDim2.fromOffset(34, 18)
-    knobBg.Position = UDim2.new(1, -46, 0.5, -9)
+    knobBg.Size = UDim2.fromOffset(34, 18); knobBg.Position = UDim2.new(1, -46, 0.5, -9)
     knobBg.BackgroundColor3 = state and Config.accent or Color3.fromRGB(60,60,60)
     knobBg.BorderSizePixel = 0; knobBg.Parent = row
     local kbc = Instance.new("UICorner"); kbc.CornerRadius = UDim.new(1,0); kbc.Parent = knobBg
-
     local knob = Instance.new("Frame")
     knob.Size = UDim2.fromOffset(14, 14)
     knob.Position = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
     knob.BackgroundColor3 = state and Config.bgColor or Config.dimColor
     knob.BorderSizePixel = 0; knob.Parent = knobBg
     local knc = Instance.new("UICorner"); knc.CornerRadius = UDim.new(1,0); knc.Parent = knob
-
-    local btn = Instance.new("TextButton")
-    btn.Text = ""; btn.BackgroundTransparency = 1; btn.Size = UDim2.new(1, -90, 1, 0); btn.Parent = row
+    local btn = Instance.new("TextButton"); btn.Text = ""; btn.BackgroundTransparency = 1
+    btn.Size = UDim2.new(1, -90, 1, 0); btn.Parent = row
 
     local function setState(v)
         state = v
@@ -419,99 +197,88 @@ local function addToggle(parentScroll, text, default, callback)
             Position = state and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7),
             BackgroundColor3 = state and Config.bgColor or Config.dimColor
         }):Play()
-        if callback then pcall(callback, state) end
+        State.options[id] = {Value = state, Type = "Toggle"}
+        if opts.Callback then pcall(opts.Callback, state) end
     end
+    State.options[id] = {Value = state, Type = "Toggle"}
     track(btn.MouseButton1Click:Connect(function() setState(not state) end))
-    track(bindLbl.MouseButton1Click:Connect(function()
-        bindLbl.Text = "[...]"
-        promptKey(function(key)
-            if key then
-                State.binds[text] = {key = key, cb = function() setState(not state) end}
-                bindLbl.Text = "[" .. key.Name .. "]"
-            else
-                State.binds[text] = nil
-                bindLbl.Text = "[None]"
-            end
-        end)
-    end))
 
-    table.insert(State.accentRegistry, {obj = knobBg, prop = "BackgroundColor3"})
-    table.insert(State.elements, {panel = row, label = lbl})
-    return row
+    local toggleObj = {}
+    function toggleObj:SetValue(v) setState(v) end
+    function toggleObj:GetValue() return state end
+    function toggleObj:AddKeyPicker(kpId, kpOpts)
+        kpOpts = kpOpts or {}
+        local defKey = kpOpts.Default or ""
+        State.options[kpId] = {Value = defKey, Type = "KeyPicker", Mode = kpOpts.Mode or "Toggle", SyncToggleState = kpOpts.SyncToggleState}
+        if not kpOpts.NoUI then bindLbl.Text = defKey ~= "" and ("["..defKey.."]") or "[None]" end
+        track(bindLbl.MouseButton1Click:Connect(function()
+            if kpOpts.NoUI then return end
+            bindLbl.Text = "[...]"
+            promptKey(function(key)
+                if key then
+                    State.options[kpId].Value = key.Name
+                    bindLbl.Text = "[" .. key.Name .. "]"
+                else
+                    State.options[kpId].Value = ""
+                    bindLbl.Text = "[None]"
+                end
+            end)
+        end))
+        State.binds[kpId] = {get = function() return State.options[kpId].Value end, mode = kpOpts.Mode, toggle = toggleObj, sync = kpOpts.SyncToggleState}
+        return toggleObj
+    end
+    State.toggles[id] = toggleObj
+    return toggleObj
 end
 
-local function addButton(parentScroll, text, callback)
-    local btn = Instance.new("TextButton")
-    btn.Text = text; btn.Font = FONT; btn.TextSize = 13; btn.TextColor3 = Config.textColor
-    btn.BackgroundColor3 = Config.panelColor; btn.BackgroundTransparency = Config.panelAlpha
-    btn.BorderSizePixel = 0; btn.AutoButtonColor = false
-    btn.Size = UDim2.new(1, -6, 0, 38)
-    btn.Parent = parentScroll
-    local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0,6); rc.Parent = btn
-    track(btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundTransparency = 0.05}):Play()
-    end))
-    track(btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundTransparency = Config.panelAlpha}):Play()
-    end))
-    track(btn.MouseButton1Click:Connect(function() if callback then pcall(callback) end end))
-    table.insert(State.elements, {panel = btn, label = btn})
-    return btn
-end
-
-local function addSlider(parentScroll, text, min, max, default, callback)
+local function makeSlider(parent, id, opts)
+    opts = opts or {}
+    local text = opts.Text or id
+    local min, max = opts.Min or 0, opts.Max or 100
+    local def = opts.Default or min
+    local rounding = opts.Rounding or 0
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -6, 0, 52)
-    row.BackgroundColor3 = Config.panelColor; row.BackgroundTransparency = Config.panelAlpha
-    row.BorderSizePixel = 0; row.Parent = parentScroll
+    row.Size = UDim2.new(1, -6, 0, 52); row.BackgroundColor3 = Config.panelColor
+    row.BackgroundTransparency = Config.panelAlpha; row.BorderSizePixel = 0; row.Parent = parent
     local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0,6); rc.Parent = row
-
     local lbl = Instance.new("TextLabel")
-    lbl.Text = text; lbl.Font = FONT; lbl.TextSize = 13; lbl.TextColor3 = Config.textColor
-    lbl.BackgroundTransparency = 1
-    lbl.Position = UDim2.new(0, 12, 0, 6); lbl.Size = UDim2.new(0.7, 0, 0, 18)
+    lbl.Text = string.format(text, def); lbl.Font = FONT; lbl.TextSize = 12; lbl.TextColor3 = Config.textColor
+    lbl.BackgroundTransparency = 1; lbl.Position = UDim2.new(0, 12, 0, 6); lbl.Size = UDim2.new(0.7, 0, 0, 18)
     lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
-
     local valLbl = Instance.new("TextLabel")
-    valLbl.Text = tostring(default); valLbl.Font = FONT; valLbl.TextSize = 12
-    valLbl.TextColor3 = Config.accent; valLbl.BackgroundTransparency = 1
-    valLbl.Position = UDim2.new(1, -60, 0, 6); valLbl.Size = UDim2.new(0, 48, 0, 18)
-    valLbl.TextXAlignment = Enum.TextXAlignment.Right; valLbl.Parent = row
-    regAccent(valLbl, "TextColor3")
-
+    valLbl.Text = tostring(def); valLbl.Font = FONT; valLbl.TextSize = 11; valLbl.TextColor3 = Config.accent
+    valLbl.BackgroundTransparency = 1; valLbl.Position = UDim2.new(1, -60, 0, 6); valLbl.Size = UDim2.new(0, 48, 0, 18)
+    valLbl.TextXAlignment = Enum.TextXAlignment.Right; valLbl.Parent = row; regAccent(valLbl, "TextColor3")
     local barBg = Instance.new("Frame")
     barBg.Size = UDim2.new(1, -24, 0, 6); barBg.Position = UDim2.new(0, 12, 0, 36)
     barBg.BackgroundColor3 = Color3.fromRGB(60,60,60); barBg.BorderSizePixel = 0; barBg.Parent = row
     local bbc = Instance.new("UICorner"); bbc.CornerRadius = UDim.new(1,0); bbc.Parent = barBg
-
     local fill = Instance.new("Frame")
-    fill.Size = UDim2.new((default-min)/(max-min), 0, 1, 0)
+    fill.Size = UDim2.new((def-min)/(max-min), 0, 1, 0)
     fill.BackgroundColor3 = Config.accent; fill.BorderSizePixel = 0; fill.Parent = barBg
-    local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(1,0); fc.Parent = fill
-    regAccent(fill)
-
-    local btn = Instance.new("TextButton")
-    btn.Text = ""; btn.BackgroundTransparency = 1; btn.Size = UDim2.fromScale(1,1); btn.Parent = barBg
-
+    local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(1,0); fc.Parent = fill; regAccent(fill)
+    local btn = Instance.new("TextButton"); btn.Text = ""; btn.BackgroundTransparency = 1
+    btn.Size = UDim2.fromScale(1,1); btn.Parent = barBg
+    local val = def
+    State.options[id] = {Value = def, Type = "Slider"}
     local function setVal(v)
         v = math.clamp(v, min, max)
+        if rounding > 0 then local m = 10^rounding; v = math.floor(v*m+0.5)/m else v = math.floor(v) end
+        val = v
         fill.Size = UDim2.new((v-min)/(max-min), 0, 1, 0)
-        valLbl.Text = tostring(math.floor(v))
-        if callback then pcall(callback, v) end
+        lbl.Text = string.format(text, v); valLbl.Text = tostring(v)
+        State.options[id].Value = v
+        if opts.Callback then pcall(opts.Callback, v) end
     end
-
     track(btn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             local function upd()
                 local m = UserInputService:GetMouseLocation()
-                local abs = barBg.AbsolutePosition
-                local sz = barBg.AbsoluteSize
-                local rel = (m.X - abs.X) / sz.X
+                local rel = math.clamp((m.X - barBg.AbsolutePosition.X) / barBg.AbsoluteSize.X, 0, 1)
                 setVal(min + rel * (max - min))
             end
             upd()
-            local conn
-            conn = UserInputService.InputChanged:Connect(function(i)
+            local conn = UserInputService.InputChanged:Connect(function(i)
                 if i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch then upd() end
             end)
             track(conn)
@@ -525,297 +292,334 @@ local function addSlider(parentScroll, text, min, max, default, callback)
             track(endConn)
         end
     end))
-    table.insert(State.elements, {panel = row, label = lbl})
-    return {row = row, setVal = setVal}
+    return {SetValue = setVal, GetValue = function() return val end}
 end
 
-local function addKeybind(parentScroll, text, callback)
+local function makeButton(parent, id, opts)
+    opts = opts or {}
+    local text = opts.Text or id
+    local btn = Instance.new("TextButton")
+    btn.Text = text; btn.Font = FONT; btn.TextSize = 12; btn.TextColor3 = Config.textColor
+    btn.BackgroundColor3 = Config.panelColor; btn.BackgroundTransparency = Config.panelAlpha
+    btn.BorderSizePixel = 0; btn.AutoButtonColor = false; btn.Size = UDim2.new(1, -6, 0, 38)
+    btn.Parent = parent
+    local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0,6); rc.Parent = btn
+    track(btn.MouseEnter:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundTransparency = 0.05}):Play() end))
+    track(btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.1), {BackgroundTransparency = Config.panelAlpha}):Play() end))
+    track(btn.MouseButton1Click:Connect(function()
+        if opts.Func then pcall(opts.Func) end
+        if opts.Callback then pcall(opts.Callback) end
+    end))
+    return btn
+end
+
+local function makeDropdown(parent, id, opts)
+    opts = opts or {}
+    local text = opts.Text or id
+    local values = opts.Values or {}
+    local cur = opts.Default or values[1] or ""
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -6, 0, 38)
-    row.BackgroundColor3 = Config.panelColor; row.BackgroundTransparency = Config.panelAlpha
-    row.BorderSizePixel = 0; row.Parent = parentScroll
+    row.Size = UDim2.new(1, -6, 0, 38); row.BackgroundColor3 = Config.panelColor
+    row.BackgroundTransparency = Config.panelAlpha; row.BorderSizePixel = 0; row.Parent = parent
     local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0,6); rc.Parent = row
     local lbl = Instance.new("TextLabel")
-    lbl.Text = text; lbl.Font = FONT; lbl.TextSize = 13; lbl.TextColor3 = Config.textColor
-    lbl.BackgroundTransparency = 1
-    lbl.Position = UDim2.new(0, 12, 0, 0); lbl.Size = UDim2.new(0.6, 0, 1, 0)
+    lbl.Text = text; lbl.Font = FONT; lbl.TextSize = 12; lbl.TextColor3 = Config.textColor
+    lbl.BackgroundTransparency = 1; lbl.Position = UDim2.new(0, 12, 0, 0); lbl.Size = UDim2.new(1, -130, 1, 0)
     lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
-    local bindBtn = Instance.new("TextButton")
-    bindBtn.Text = "[None]"; bindBtn.Font = FONT; bindBtn.TextSize = 11
-    bindBtn.TextColor3 = Config.dimColor; bindBtn.BackgroundTransparency = 1
-    bindBtn.Position = UDim2.new(1, -100, 0, 0); bindBtn.Size = UDim2.new(0, 90, 1, 0)
-    bindBtn.TextXAlignment = Enum.TextXAlignment.Right; bindBtn.Parent = row
-    track(bindBtn.MouseEnter:Connect(function() bindBtn.TextColor3 = Config.accent end))
-    track(bindBtn.MouseLeave:Connect(function() bindBtn.TextColor3 = Config.dimColor end))
-    track(bindBtn.MouseButton1Click:Connect(function()
-        bindBtn.Text = "[...]"
-        promptKey(function(key)
-            if key then
-                State.binds[text] = {key = key, cb = callback}
-                bindBtn.Text = "[" .. key.Name .. "]"
-            else
-                State.binds[text] = nil
-                bindBtn.Text = "[None]"
-            end
-        end)
+    local valBtn = Instance.new("TextButton")
+    valBtn.Text = tostring(cur); valBtn.Font = FONT; valBtn.TextSize = 11; valBtn.TextColor3 = Config.accent
+    valBtn.BackgroundTransparency = 1; valBtn.Position = UDim2.new(1, -120, 0, 0); valBtn.Size = UDim2.new(0, 110, 1, 0)
+    valBtn.TextXAlignment = Enum.TextXAlignment.Right; valBtn.Parent = row; regAccent(valBtn, "TextColor3")
+    State.options[id] = {Value = cur, Type = "Dropdown"}
+
+    local dd = {}
+    function dd:SetValue(v)
+        cur = v; valBtn.Text = tostring(v); State.options[id].Value = v
+        if opts.Callback then pcall(opts.Callback, v) end
+    end
+    function dd:SetValues(vals) values = vals end
+    function dd:GetValue() return cur end
+
+    -- выпадающий список
+    local listFrame = Instance.new("Frame")
+    listFrame.Size = UDim2.new(1, -6, 0, 0); listFrame.AutomaticSize = Enum.AutomaticSize.Y
+    listFrame.BackgroundColor3 = Config.panelColor; listFrame.BackgroundTransparency = 0.05
+    listFrame.BorderSizePixel = 0; listFrame.Visible = false; listFrame.ZIndex = 10; listFrame.Parent = parent
+    local lc = Instance.new("UICorner"); lc.CornerRadius = UDim.new(0,6); lc.Parent = listFrame
+    local ll = Instance.new("UIListLayout"); ll.Padding = UDim.new(0, 2); ll.Parent = listFrame
+    local lp = Instance.new("UIPadding"); lp.PaddingTop = UDim.new(0,4); lp.PaddingBottom = UDim.new(0,4); lp.Parent = listFrame
+
+    local function rebuildList()
+        for _, c in ipairs(listFrame:GetChildren()) do
+            if c:IsA("TextButton") then c:Destroy() end
+        end
+        for _, v in ipairs(values) do
+            local b = Instance.new("TextButton")
+            b.Text = tostring(v); b.Font = FONT; b.TextSize = 11; b.TextColor3 = Config.textColor
+            b.BackgroundColor3 = Config.panelColor; b.BackgroundTransparency = 0.5
+            b.BorderSizePixel = 0; b.AutoButtonColor = false; b.Size = UDim2.new(1, -8, 0, 26)
+            b.ZIndex = 11; b.Parent = listFrame
+            local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0,4); bc.Parent = b
+            track(b.MouseEnter:Connect(function() b.BackgroundTransparency = 0.2 end))
+            track(b.MouseLeave:Connect(function() b.BackgroundTransparency = 0.5 end))
+            track(b.MouseButton1Click:Connect(function()
+                dd:SetValue(v); listFrame.Visible = false
+            end))
+        end
+    end
+
+    track(valBtn.MouseButton1Click:Connect(function()
+        listFrame.Visible = not listFrame.Visible
+        if listFrame.Visible then rebuildList() end
     end))
-    table.insert(State.elements, {panel = row, label = lbl})
-    return row
+    return dd
 end
 
-local function addSection(parentScroll, text)
+local function makeInput(parent, id, opts)
+    opts = opts or {}
+    local text = opts.Text or id
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -6, 0, 38); row.BackgroundColor3 = Config.panelColor
+    row.BackgroundTransparency = Config.panelAlpha; row.BorderSizePixel = 0; row.Parent = parent
+    local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0,6); rc.Parent = row
     local lbl = Instance.new("TextLabel")
-    lbl.Text = text:upper(); lbl.Font = FONT_B; lbl.TextSize = 10; lbl.TextColor3 = Config.dimColor
-    lbl.BackgroundTransparency = 1
-    lbl.Size = UDim2.new(1, -6, 0, 20)
-    lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = parentScroll
-    table.insert(State.elements, {label = lbl})
-    return lbl
+    lbl.Text = text; lbl.Font = FONT; lbl.TextSize = 12; lbl.TextColor3 = Config.textColor
+    lbl.BackgroundTransparency = 1; lbl.Position = UDim2.new(0, 12, 0, 0); lbl.Size = UDim2.new(0.45, 0, 1, 0)
+    lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
+    local box = Instance.new("TextBox")
+    box.Text = opts.Default or ""; box.PlaceholderText = opts.Placeholder or ""
+    box.Font = FONT; box.TextSize = 11; box.TextColor3 = Config.textColor
+    box.PlaceholderColor3 = Config.dimColor
+    box.BackgroundColor3 = Color3.fromRGB(35,35,35); box.BorderSizePixel = 0
+    box.Position = UDim2.new(0.45, 0, 0.15, 0); box.Size = UDim2.new(0.55, -12, 0.7, 0)
+    box.ClearTextOnFocus = false; box.Parent = row
+    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0,4); bc.Parent = box
+    State.options[id] = {Value = box.Text, Type = "Input"}
+    track(box.FocusLost:Connect(function()
+        State.options[id].Value = box.Text
+        if opts.Callback then pcall(opts.Callback, box.Text) end
+    end))
+    return box
 end
 
--- ===== КАСТОМ-КОНТРОЛЫ =====
-local function addColorPicker(parentScroll, label, default, callback)
-    -- simple: preset-кнопки + RGB слайдеры
+local function makeLabel(parent, text)
     local holder = Instance.new("Frame")
-    holder.Size = UDim2.new(1, -6, 0, 110)
-    holder.BackgroundColor3 = Config.panelColor; holder.BackgroundTransparency = Config.panelAlpha
-    holder.BorderSizePixel = 0; holder.Parent = parentScroll
-    local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0,6); rc.Parent = holder
-    table.insert(State.elements, {panel = holder})
-
+    holder.Size = UDim2.new(1, -6, 0, 28); holder.BackgroundTransparency = 1
+    holder.Parent = parent
     local lbl = Instance.new("TextLabel")
-    lbl.Text = label; lbl.Font = FONT; lbl.TextSize = 12; lbl.TextColor3 = Config.textColor
-    lbl.BackgroundTransparency = 1
-    lbl.Position = UDim2.new(0, 12, 0, 6); lbl.Size = UDim2.new(0.6, 0, 0, 16)
+    lbl.Text = text; lbl.Font = FONT; lbl.TextSize = 12; lbl.TextColor3 = Config.dimColor
+    lbl.BackgroundTransparency = 1; lbl.Size = UDim2.new(1, 0, 1, 0)
     lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = holder
-
-    local preview = Instance.new("Frame")
-    preview.Size = UDim2.fromOffset(24, 24); preview.Position = UDim2.new(1, -38, 0, 6)
-    preview.BackgroundColor3 = default; preview.BorderSizePixel = 0; preview.Parent = holder
-    local pc = Instance.new("UICorner"); pc.CornerRadius = UDim.new(0,4); pc.Parent = preview
-
-    local r, g, b = default.R * 255, default.G * 255, default.B * 255
-    local labels = {"R", "G", "B"}
-    local vals = {r, g, b}
-    local fills = {}
-    local valLabels = {}
-
-    local function updateAll()
-        local col = Color3.fromRGB(vals[1], vals[2], vals[3])
-        preview.BackgroundColor3 = col
-        if callback then pcall(callback, col) end
-    end
-
-    for i = 1, 3 do
-        local y = 32 + (i-1) * 24
-        local ch = Instance.new("TextLabel")
-        ch.Text = labels[i]; ch.Font = FONT_B; ch.TextSize = 10; ch.TextColor3 = Config.dimColor
-        ch.BackgroundTransparency = 1
-        ch.Position = UDim2.new(0, 12, 0, y); ch.Size = UDim2.new(0, 14, 0, 18)
-        ch.TextXAlignment = Enum.TextXAlignment.Left; ch.Parent = holder
-
-        local barBg = Instance.new("Frame")
-        barBg.Size = UDim2.new(1, -90, 0, 6); barBg.Position = UDim2.new(0, 32, 0, y + 6)
-        barBg.BackgroundColor3 = Color3.fromRGB(60,60,60); barBg.BorderSizePixel = 0; barBg.Parent = holder
-        local bbc = Instance.new("UICorner"); bbc.CornerRadius = UDim.new(1,0); bbc.Parent = barBg
-
-        local fill = Instance.new("Frame")
-        fill.Size = UDim2.new(vals[i]/255, 0, 1, 0)
-        fill.BackgroundColor3 = (i==1 and Color3.fromRGB(255,60,60)) or (i==2 and Color3.fromRGB(60,255,60)) or Color3.fromRGB(60,60,255)
-        fill.BorderSizePixel = 0; fill.Parent = barBg
-        local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(1,0); fc.Parent = fill
-        fills[i] = fill
-
-        local vl = Instance.new("TextLabel")
-        vl.Text = tostring(vals[i]); vl.Font = FONT; vl.TextSize = 10; vl.TextColor3 = Config.textColor
-        vl.BackgroundTransparency = 1
-        vl.Position = UDim2.new(1, -54, 0, y); vl.Size = UDim2.new(0, 40, 0, 18)
-        vl.TextXAlignment = Enum.TextXAlignment.Right; vl.Parent = holder
-        valLabels[i] = vl
-
-        local btn = Instance.new("TextButton")
-        btn.Text = ""; btn.BackgroundTransparency = 1; btn.Size = UDim2.fromScale(1,1); btn.Parent = barBg
-
-        track(btn.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                local function upd()
-                    local m = UserInputService:GetMouseLocation()
-                    local abs = barBg.AbsolutePosition
-                    local sz = barBg.AbsoluteSize
-                    local rel = math.clamp((m.X - abs.X) / sz.X, 0, 1)
-                    vals[i] = math.floor(rel * 255)
-                    fill.Size = UDim2.new(rel, 0, 1, 0)
-                    vl.Text = tostring(vals[i])
-                    updateAll()
-                end
-                upd()
-                local conn
-                conn = UserInputService.InputChanged:Connect(function(inp)
-                    if inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch then upd() end
-                end)
-                track(conn)
-                local endConn
-                endConn = UserInputService.InputEnded:Connect(function(inp)
-                    if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
-                        if conn then conn:Disconnect() end
-                        if endConn then endConn:Disconnect() end
+    local obj = {}
+    function obj:AddColorPicker(id, opts)
+        opts = opts or {}
+        local cp = Instance.new("Frame")
+        cp.Size = UDim2.new(1, 0, 0, 90); cp.BackgroundColor3 = Config.panelColor
+        cp.BackgroundTransparency = Config.panelAlpha; cp.BorderSizePixel = 0
+        cp.Parent = parent
+        local cpc = Instance.new("UICorner"); cpc.CornerRadius = UDim.new(0,6); cpc.Parent = cp
+        local r, g, b = (opts.Default or Color3.new(1,1,1)).R*255, (opts.Default or Color3.new(1,1,1)).G*255, (opts.Default or Color3.new(1,1,1)).B*255
+        State.options[id] = {Value = opts.Default or Color3.new(1,1,1), Type = "ColorPicker"}
+        local function upd()
+            local col = Color3.fromRGB(r, g, b)
+            State.options[id].Value = col
+            if opts.Callback then pcall(opts.Callback, col) end
+        end
+        for i, ch in ipairs({"R","G","B"}) do
+            local cl = Instance.new("TextLabel")
+            cl.Text = ch; cl.Font = FONT_B; cl.TextSize = 10; cl.TextColor3 = Config.dimColor
+            cl.BackgroundTransparency = 1; cl.Position = UDim2.new(0, 10, 0, 8 + (i-1)*26)
+            cl.Size = UDim2.new(0, 14, 0, 18); cl.Parent = cp
+            local bar = Instance.new("Frame")
+            bar.Size = UDim2.new(1, -60, 0, 6); bar.Position = UDim2.new(0, 30, 0, 14 + (i-1)*26)
+            bar.BackgroundColor3 = Color3.fromRGB(60,60,60); bar.BorderSizePixel = 0; bar.Parent = cp
+            local bbc = Instance.new("UICorner"); bbc.CornerRadius = UDim.new(1,0); bbc.Parent = bar
+            local vals = ({r,g,b})[i]
+            local fill = Instance.new("Frame")
+            fill.Size = UDim2.new(vals/255, 0, 1, 0)
+            fill.BackgroundColor3 = Color3.fromRGB(255,255,255); fill.BorderSizePixel = 0; fill.Parent = bar
+            local fc = Instance.new("UICorner"); fc.CornerRadius = UDim.new(1,0); fc.Parent = fill
+            local btn = Instance.new("TextButton"); btn.Text = ""; btn.BackgroundTransparency = 1
+            btn.Size = UDim2.fromScale(1,1); btn.Parent = bar
+            track(btn.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                    local function set2()
+                        local m = UserInputService:GetMouseLocation()
+                        local rel = math.clamp((m.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+                        local v = math.floor(rel * 255)
+                        fill.Size = UDim2.new(rel, 0, 1, 0)
+                        if i == 1 then r = v elseif i == 2 then g = v else b = v end
+                        upd()
                     end
-                end)
-                track(endConn)
-            end
-        end))
+                    set2()
+                    local conn = UserInputService.InputChanged:Connect(function(inp)
+                        if inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch then set2() end
+                    end)
+                    track(conn)
+                    local endConn
+                    endConn = UserInputService.InputEnded:Connect(function(inp)
+                        if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+                            if conn then conn:Disconnect() end
+                            if endConn then endConn:Disconnect() end
+                        end
+                    end)
+                    track(endConn)
+                end
+            end))
+        end
+        return {SetValue = function(c) r, g, b = c.R*255, c.G*255, c.B*255; upd() end}
     end
+    return obj
 end
 
--- ===== СТРАНИЦЫ НАПОЛНЕНИЕ =====
-do
-    local s = pageScroll.General
-    addSection(s, "Combat")
-    addToggle(s, "Aimbot", false, function(v) print("aimbot:", v) end)
-    addToggle(s, "Silent Aim", false, function(v) print("silent:", v) end)
-    addSlider(s, "FOV", 10, 360, 90, function(v) print("fov:", v) end)
-end
-
-do
-    local s = pageScroll.Player
-    addSection(s, "Movement")
-    addToggle(s, "Speed Hack", false, function(v) print("speed:", v) end)
-    addSlider(s, "WalkSpeed", 16, 300, 16, function(v) print("ws:", v) end)
-    addToggle(s, "Fly", false, function(v) print("fly:", v) end)
-end
-
-do
-    local s = pageScroll.Binds
-    addSection(s, "Global Binds")
-    addKeybind(s, "Teleport Spawn", function() print("tp spawn") end)
-    addKeybind(s, "Reset Character", function() print("reset") end)
-    addKeybind(s, "Panic (unload)", function() unload() end)
-end
-
-do
-    local s = pageScroll.Misc
-    addSection(s, "Menu")
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -6, 0, 38)
-    row.BackgroundColor3 = Config.panelColor; row.BackgroundTransparency = Config.panelAlpha
-    row.BorderSizePixel = 0; row.Parent = s
-    local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0,6); rc.Parent = row
-    local lbl = Instance.new("TextLabel")
-    lbl.Text = "Toggle Menu Key"; lbl.Font = FONT; lbl.TextSize = 13; lbl.TextColor3 = Config.textColor
-    lbl.BackgroundTransparency = 1
-    lbl.Position = UDim2.new(0, 12, 0, 0); lbl.Size = UDim2.new(0.6, 0, 1, 0)
-    lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
-    local bindBtn = Instance.new("TextButton")
-    bindBtn.Text = "[" .. Config.menuBind.Name .. "]"
-    bindBtn.Font = FONT; bindBtn.TextSize = 11; bindBtn.TextColor3 = Config.accent
-    bindBtn.BackgroundTransparency = 1
-    bindBtn.Position = UDim2.new(1, -110, 0, 0); bindBtn.Size = UDim2.new(0, 100, 1, 0)
-    bindBtn.TextXAlignment = Enum.TextXAlignment.Right; bindBtn.Parent = row
-    regAccent(bindBtn, "TextColor3")
-    track(bindBtn.MouseButton1Click:Connect(function()
-        bindBtn.Text = "[...]"
-        promptKey(function(key)
-            if key then
-                Config.menuBind = key
-                bindBtn.Text = "[" .. key.Name .. "]"
-                menuBindLbl.Text = "[" .. key.Name .. "]"
-            else
-                bindBtn.Text = "[" .. Config.menuBind.Name .. "]"
-            end
-        end)
-    end))
-    table.insert(State.elements, {panel = row, label = lbl})
-
-    addSection(s, "Actions")
-    addButton(s, "Reset Config", function() print("reset cfg") end)
-    addButton(s, "Unload Script", function() unload() end)
-end
-
--- ===== CUSTOM PAGE =====
-do
-    local s = pageScroll.Custom
-
-    addSection(s, "Theme")
-    -- пресеты фона
-    local presets = {
-        {name = "Dark",     bg = Color3.fromRGB(15,15,15),  panel = Color3.fromRGB(22,22,22),  stroke = Color3.fromRGB(45,45,45)},
-        {name = "Midnight", bg = Color3.fromRGB(10,12,20),  panel = Color3.fromRGB(18,20,30),  stroke = Color3.fromRGB(40,45,60)},
-        {name = "Carbon",   bg = Color3.fromRGB(20,20,20),  panel = Color3.fromRGB(30,30,30),  stroke = Color3.fromRGB(55,55,55)},
-        {name = "Glass",    bg = Color3.fromRGB(40,45,55),  panel = Color3.fromRGB(60,65,75),  stroke = Color3.fromRGB(90,95,105)},
-        {name = "Blood",    bg = Color3.fromRGB(20,8,8),    panel = Color3.fromRGB(30,12,12),  stroke = Color3.fromRGB(60,25,25)},
-    }
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -6, 0, 46)
-    row.BackgroundColor3 = Config.panelColor; row.BackgroundTransparency = Config.panelAlpha
-    row.BorderSizePixel = 0; row.Parent = s
-    local rc = Instance.new("UICorner"); rc.CornerRadius = UDim.new(0,6); rc.Parent = row
+-- ===== СТРАНИЦЫ / ТАБЫ =====
+local function createPage(name)
     local holder = Instance.new("Frame")
-    holder.BackgroundTransparency = 1
-    holder.Position = UDim2.new(0, 8, 0, 8)
-    holder.Size = UDim2.new(1, -16, 0, 30)
-    holder.Parent = row
-    local hl = Instance.new("UIListLayout")
-    hl.FillDirection = Enum.FillDirection.Horizontal
-    hl.Padding = UDim.new(0, 6); hl.VerticalAlignment = Enum.VerticalAlignment.Center
-    hl.Parent = holder
-    for _, t in ipairs(presets) do
-        local b = Instance.new("TextButton")
-        b.Text = t.name; b.Font = FONT; b.TextSize = 11; b.TextColor3 = Config.textColor
-        b.BackgroundColor3 = t.bg; b.BorderSizePixel = 0; b.AutoButtonColor = false
-        b.Size = UDim2.fromOffset(70, 28); b.Parent = holder
-        local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,4); c.Parent = b
-        local st = Instance.new("UIStroke"); st.Color = t.stroke; st.Thickness = 1; st.Parent = b
-        track(b.MouseButton1Click:Connect(function()
-            Config.bgColor = t.bg
-            Config.panelColor = t.panel
-            Config.strokeColor = t.stroke
-            rebuildColors()
-        end))
+    holder.Name = "Page_" .. name; holder.Size = UDim2.fromScale(1, 1)
+    holder.BackgroundTransparency = 1; holder.Visible = false; holder.ZIndex = 2; holder.Parent = contentHolder
+
+    local scrollL = Instance.new("ScrollingFrame")
+    scrollL.Size = UDim2.new(0.5, -8, 1, -16); scrollL.Position = UDim2.new(0, 8, 0, 8)
+    scrollL.BackgroundTransparency = 1; scrollL.BorderSizePixel = 0
+    scrollL.ScrollBarThickness = 3; scrollL.ScrollBarImageColor3 = Config.strokeColor
+    scrollL.CanvasSize = UDim2.new(0,0,0,0); scrollL.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scrollL.ZIndex = 2; scrollL.Parent = holder
+    local ll = Instance.new("UIListLayout"); ll.Padding = UDim.new(0, 6); ll.SortOrder = Enum.SortOrder.LayoutOrder; ll.Parent = scrollL
+
+    local scrollR = Instance.new("ScrollingFrame")
+    scrollR.Size = UDim2.new(0.5, -8, 1, -16); scrollR.Position = UDim2.new(0.5, 0, 0, 8)
+    scrollR.BackgroundTransparency = 1; scrollR.BorderSizePixel = 0
+    scrollR.ScrollBarThickness = 3; scrollR.ScrollBarImageColor3 = Config.strokeColor
+    scrollR.CanvasSize = UDim2.new(0,0,0,0); scrollR.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scrollR.ZIndex = 2; scrollR.Parent = holder
+    local rl = Instance.new("UIListLayout"); rl.Padding = UDim.new(0, 6); rl.SortOrder = Enum.SortOrder.LayoutOrder; rl.Parent = scrollR
+
+    State.pages[name] = {holder = holder, scrollL = scrollL, scrollR = scrollR, tabBtn = nil, name = name}
+    return {L = scrollL, R = scrollR}
+end
+
+local activeIndicator = Instance.new("Frame")
+activeIndicator.Size = UDim2.new(0, 3, 0, 28); activeIndicator.BackgroundColor3 = Config.accent
+activeIndicator.BorderSizePixel = 0; activeIndicator.ZIndex = 3; activeIndicator.Parent = sidebar
+local aiC = Instance.new("UICorner"); aiC.CornerRadius = UDim.new(1,0); aiC.Parent = activeIndicator
+
+local function switchPage(name)
+    for n, page in pairs(State.pages) do page.holder.Visible = (n == name) end
+    State.currentPage = name
+    local btn = State.pages[name] and State.pages[name].tabBtn
+    if btn then
+        TweenService:Create(activeIndicator, TweenInfo.new(0.18, Enum.EasingStyle.Quad), {
+            Position = UDim2.new(0, 0, 0, btn.AbsolutePosition.Y - sidebar.AbsolutePosition.Y)
+        }):Play()
     end
+    for n, page in pairs(State.pages) do
+        if page.tabBtn then page.tabBtn.TextColor3 = (n == name) and Config.accent or Config.dimColor end
+    end
+end
 
-    addSection(s, "Accent")
-    addColorPicker(s, "Accent Color", Config.accent, function(col)
-        applyAccent(col)
-    end)
+local function makeTabObj(name)
+    local s = createPage(name)
+    local page = State.pages[name]
 
-    addSection(s, "Menu Appearance")
-    addSlider(s, "Menu Transparency", 0, 1, 1 - Config.menuAlpha, function(v)
-        Config.menuAlpha = 1 - v
-        main.BackgroundTransparency = Config.menuAlpha
-    end)
-    addSlider(s, "Panel Transparency", 0, 1, 1 - Config.panelAlpha, function(v)
-        Config.panelAlpha = 1 - v
-        rebuildColors()
-    end)
-    addSlider(s, "Corner Radius", 0, 24, Config.radius, function(v)
-        Config.radius = math.floor(v)
-        corner.CornerRadius = UDim.new(0, Config.radius)
-        tc.CornerRadius = UDim.new(0, Config.radius)
-    end)
-    addSlider(s, "Width", 400, 800, Config.width, function(v)
-        Config.width = math.floor(v)
-        main.Size = UDim2.fromOffset(Config.width, Config.height)
-        main.Position = UDim2.new(0.5, -Config.width/2, main.Position.Y.Scale, main.Position.Y.Offset)
-    end)
-    addSlider(s, "Height", 280, 700, Config.height, function(v)
-        Config.height = math.floor(v)
-        main.Size = UDim2.fromOffset(Config.width, Config.height)
-        main.Position = UDim2.new(main.Position.X.Scale, main.Position.X.Offset, 0.5, -Config.height/2)
+    local btn = Instance.new("TextButton")
+    btn.Text = string.sub(name, 1, 1):upper(); btn.Font = FONT_B; btn.TextSize = 15
+    btn.TextColor3 = Config.dimColor; btn.BackgroundColor3 = Config.panelColor
+    btn.BackgroundTransparency = 0.4; btn.BorderSizePixel = 0; btn.AutoButtonColor = false
+    btn.Size = UDim2.fromOffset(44, 44); btn.LayoutOrder = #State.pages
+    btn.ZIndex = 3; btn.Parent = sidebar
+    local bc = Instance.new("UICorner"); bc.CornerRadius = UDim.new(0,8); bc.Parent = btn
+    page.tabBtn = btn
+    track(btn.MouseEnter:Connect(function()
+        if State.currentPage ~= name then TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundTransparency = 0.15}):Play() end
+    end))
+    track(btn.MouseLeave:Connect(function()
+        if State.currentPage ~= name then TweenService:Create(btn, TweenInfo.new(0.12), {BackgroundTransparency = 0.4}):Play() end
+    end))
+    track(btn.MouseButton1Click:Connect(function() switchPage(name) end))
+
+    local tabObj = {}
+    local function makeGB(scroll)
+        return function(gbName)
+            local gb = Instance.new("Frame")
+            gb.Size = UDim2.new(1, 0, 0, 28); gb.AutomaticSize = Enum.AutomaticSize.Y
+            gb.BackgroundColor3 = Config.panelColor; gb.BackgroundTransparency = Config.panelAlpha
+            gb.BorderSizePixel = 0; gb.Parent = scroll
+            local gbc = Instance.new("UICorner"); gbc.CornerRadius = UDim.new(0,8); gbc.Parent = gb
+            local gbp = Instance.new("UIPadding")
+            gbp.PaddingTop = UDim.new(0, 8); gbp.PaddingBottom = UDim.new(0, 8)
+            gbp.PaddingLeft = UDim.new(0, 8); gbp.PaddingRight = UDim.new(0, 8); gbp.Parent = gb
+            local gbl = Instance.new("UIListLayout"); gbl.Padding = UDim.new(0, 5); gbl.SortOrder = Enum.SortOrder.LayoutOrder; gbl.Parent = gb
+            local hdr = Instance.new("TextLabel")
+            hdr.Text = gbName:upper(); hdr.Font = FONT_B; hdr.TextSize = 10; hdr.TextColor3 = Config.dimColor
+            hdr.BackgroundTransparency = 1; hdr.Size = UDim2.new(1, 0, 0, 16)
+            hdr.TextXAlignment = Enum.TextXAlignment.Left; hdr.LayoutOrder = -1; hdr.Parent = gb
+            local groupObj = {}
+            function groupObj:AddToggle(id, opts) return makeToggle(gb, id, opts) end
+            function groupObj:AddSlider(id, opts) return makeSlider(gb, id, opts) end
+            function groupObj:AddButton(id, opts) return makeButton(gb, id, opts) end
+            function groupObj:AddDropdown(id, opts) return makeDropdown(gb, id, opts) end
+            function groupObj:AddInput(id, opts) return makeInput(gb, id, opts) end
+            function groupObj:AddLabel(text) return makeLabel(gb, text) end
+            return groupObj
+        end
+    end
+    function tabObj:AddLeftGroupbox(gbName) return makeGB(s.L)(gbName) end
+    function tabObj:AddRightGroupbox(gbName) return makeGB(s.R)(gbName) end
+    return tabObj
+end
+
+-- ===== NOTIFY =====
+local notifyHolder = Instance.new("Frame")
+notifyHolder.Name = "NotifyHolder"
+notifyHolder.Size = UDim2.new(0, 280, 1, -100); notifyHolder.Position = UDim2.new(1, -300, 0, 50)
+notifyHolder.BackgroundTransparency = 1; notifyHolder.ZIndex = 100; notifyHolder.Parent = gui
+local nl = Instance.new("UIListLayout"); nl.Padding = UDim.new(0, 6); nl.VerticalAlignment = Enum.VerticalAlignment.Top; nl.Parent = notifyHolder
+
+local function notify(msg, duration)
+    duration = duration or 3
+    local n = Instance.new("Frame")
+    n.Size = UDim2.new(1, 0, 0, 40); n.BackgroundColor3 = Config.panelColor
+    n.BackgroundTransparency = 0.05; n.BorderSizePixel = 0; n.ZIndex = 101; n.Parent = notifyHolder
+    local nc = Instance.new("UICorner"); nc.CornerRadius = UDim.new(0,6); nc.Parent = n
+    local ns = Instance.new("UIStroke"); ns.Color = Config.accent; ns.Thickness = 1; ns.Parent = n
+    local lbl = Instance.new("TextLabel")
+    lbl.Text = tostring(msg); lbl.Font = FONT; lbl.TextSize = 12; lbl.TextColor3 = Config.textColor
+    lbl.BackgroundTransparency = 1; lbl.Size = UDim2.new(1, -20, 1, 0); lbl.Position = UDim2.new(0, 10, 0, 0)
+    lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.TextWrapped = true; lbl.Parent = n
+    task.delay(duration, function()
+        if n and n.Parent then
+            TweenService:Create(n, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
+            TweenService:Create(lbl, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
+            task.wait(0.2); n:Destroy()
+        end
     end)
 end
 
--- ===== МЕНЮ ВИДИМОСТЬ =====
+-- ===== WATERMARK =====
+local wm = Instance.new("TextLabel")
+wm.Name = "Watermark"; wm.Visible = false
+wm.Font = FONT_B; wm.TextSize = 14; wm.TextColor3 = Config.textColor
+wm.BackgroundTransparency = 1; wm.TextStrokeTransparency = 0
+wm.AnchorPoint = Vector2.new(1, 0); wm.Position = UDim2.new(1, -12, 0, 8)
+wm.Size = UDim2.new(0, 300, 0, 20); wm.TextXAlignment = Enum.TextXAlignment.Right
+wm.ZIndex = 200; wm.Parent = gui
+local wmConn
+local function setWatermark(text)
+    wm.Text = tostring(text) .. "  |  " .. math.floor(1/RunService.RenderStepped:Wait() or 60) .. " FPS"
+end
+
+-- ===== МЕНЮ-ВИДИМОСТЬ =====
 local function setMenuVisible(visible)
     State.open = visible
     if visible then
         main.Visible = true
         main.Size = UDim2.fromOffset(Config.width, Config.height)
         main.BackgroundTransparency = Config.menuAlpha
-        TweenService:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+        TweenService:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {
             Size = UDim2.fromOffset(Config.width, Config.height),
         }):Play()
     else
-        local t = TweenService:Create(main, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        local t = TweenService:Create(main, TweenInfo.new(0.2), {
             Size = UDim2.fromOffset(Config.width * 0.92, Config.height * 0.9),
             BackgroundTransparency = 1,
         })
@@ -825,10 +629,14 @@ local function setMenuVisible(visible)
 end
 
 -- ===== UNLOAD =====
-function unload()
+local function unload()
+    if State.unloaded then return end
+    State.unloaded = true
+    if Library.OnUnload then pcall(Library.OnUnload) end
     for _, c in ipairs(State.conns) do pcall(function() c:Disconnect() end) end
     State.conns = {}
-    local t = TweenService:Create(main, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    if wmConn then pcall(function() wmConn:Disconnect() end) end
+    local t = TweenService:Create(main, TweenInfo.new(0.25), {
         Size = UDim2.fromOffset(Config.width * 0.7, Config.height * 0.7),
         BackgroundTransparency = 1,
     })
@@ -841,28 +649,89 @@ end
 track(UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
-    if input.KeyCode == Config.menuBind then
-        setMenuVisible(not State.open)
-        return
+    if input.KeyCode == Config.menuBind then setMenuVisible(not State.open); return end
+    for _, b in pairs(State.binds) do
+        if b.get and b.get() ~= "" and input.KeyCode.Name == b.get() then
+            if b.mode == "Toggle" and b.toggle then
+                b.toggle:SetValue(not b.toggle:GetValue())
+            elseif b.mode == "Press" then
+                if b.toggle then b.toggle:SetValue(not b.toggle:GetValue()) end
+            end
+        end
     end
     for _, b in pairs(State.binds) do
-        if b.key == input.KeyCode then pcall(b.cb) end
+        if b.key and input.KeyCode == b.key and b.cb then pcall(b.cb) end
     end
 end))
 
 -- ===== СТАРТ =====
 do
-    local originalPos = main.Position
+    local origPos = main.Position
     main.Size = UDim2.fromOffset(Config.width * 0.92, Config.height * 0.9)
     main.BackgroundTransparency = 1
-    main.Position = originalPos + UDim2.fromOffset(0, 12)
-    switchPage("General")
+    main.Position = origPos + UDim2.fromOffset(0, 12)
     task.wait(0.05)
-    TweenService:Create(main, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+    TweenService:Create(main, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {
         Size = UDim2.fromOffset(Config.width, Config.height),
         BackgroundTransparency = Config.menuAlpha,
-        Position = originalPos,
+        Position = origPos,
     }):Play()
 end
 
-applyAccent(Config.accent)
+-- ===== LINORIA-СОВМЕСТИМЫЙ API =====
+local Library = {}
+Library.__index = Library
+Library.ToggleKeybind = {Value = "RightShift"}
+Library.KeybindFrame = {Visible = true}
+Library.OnUnload = nil
+
+function Library:CreateWindow(opts)
+    opts = opts or {}
+    if opts.Title and opts.Title ~= "" then title.Text = opts.Title:upper() end
+    local WindowObj = {}
+    function WindowObj:AddTab(name) return makeTabObj(name) end
+    return WindowObj
+end
+
+function Library:Notify(msg, dur)
+    notify(msg, dur or 3)
+end
+
+function Library:SetWatermark(text)
+    wm.Visible = true
+    wm.Text = tostring(text) .. "  |  Aphex"
+    -- не обновляем FPS чтобы не грузить
+end
+
+function Library:Unload()
+    unload()
+end
+
+-- ===== ЭКСПОРТ =====
+if not getgenv().Options then getgenv().Options = {} end
+if not getgenv().Toggles then getgenv().Toggles = {} end
+
+-- при создании тоггла кладём в getgenv()
+local origMakeToggle = makeToggle
+makeToggle = function(parent, id, opts)
+    local t = origMakeToggle(parent, id, opts)
+    getgenv().Toggles[id] = t
+    return t
+end
+
+-- все options будут синхронизироваться через State.options
+local realOptions = State.options
+State.options = setmetatable({}, {
+    __index = function(_, k) return realOptions[k] end,
+    __newindex = function(_, k, v) realOptions[k] = v; getgenv().Options[k] = v end,
+})
+
+-- переключаем страницу по умолчанию
+if next(State.pages) then
+    local firstName = next(State.pages)
+    switchPage(firstName)
+end
+
+-- ===== ФИНАЛ =====
+getgenv().Library = Library
+return Library
